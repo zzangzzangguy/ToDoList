@@ -33,7 +33,7 @@ class MainVC: UIViewController {
     }()
     override func viewDidLoad() {
         super.viewDidLoad()
-//        view.backgroundColor =
+        view.backgroundColor = .red
         view.addSubview(ImageButton)
         view.addSubview(TodoButton)
         setupConstraints()

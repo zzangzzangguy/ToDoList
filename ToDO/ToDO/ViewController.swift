@@ -23,63 +23,71 @@ class ViewController: UIViewController {
         case life = "생활"
     }
     
-//    let pickerData: [String] = [
-//        TodoSection.exercsie.rawValue,
-//        TodoSection.work.rawValue,
-//        TodoSection.life.rawValue
-//    ]
     
     // 메인 자료구조
     var sectionedItems: [TodoSection: [String]] = [:]
     
     override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        print("### viewWillAppear called")
         
-          }
-
+        
+        if let savedItems = UserDefaults.standard.array(forKey: "savedItems") as? [String] {
+            items = savedItems
+            sectionedItems = [:]
+            //             섹션 별로 할 일을 정리하여 sectionedItems 딕셔너리에 저장
+            for item in items {
+                let components = item.components(separatedBy: ":")
+                if components.count == 2,
+                   let sectionString = components.first,
+                   let section = TodoSection(rawValue: sectionString),
+                   let task = components.last {
+                    if var sectionItems = sectionedItems[section] {
+                        sectionItems.append(task)
+                        sectionedItems[section] = sectionItems
+                    } else {
+                        sectionedItems[section] = [task]
+                    }
+                }
+            }
+            
+            print("# 앱 다시 실행시 불러온다: \(items)")
+            view.addSubview(ToDoView)
+            ToDoView.reloadData()
+            print("나 \(ToDoView)호출 잘하고잇나")
+            
+        }
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
-
-
-        
-//        UserDefaults.standard.removeObject(forKey: "savedItems")
-        
-        
-        
-//        items = []
-//        sectionedItems = [:]
         
         let pickerView = UIPickerView()
-              pickerView.delegate = self
-              pickerView.dataSource = self
-              
-              let pickerToolbar = UIToolbar()
-              pickerToolbar.sizeToFit()
-              let doneButton = UIBarButtonItem(title: "Done", style: .plain, target: self, action: #selector(pickerDoneButtonTapped))
-              pickerToolbar.setItems([doneButton], animated: false)
-              
-              let textField = UITextField()
-              textField.inputView = pickerView
-              textField.inputAccessoryView = pickerToolbar
+        pickerView.delegate = self
+        pickerView.dataSource = self
         
-              view.addSubview(textField)
+        let pickerToolbar = UIToolbar()
+        pickerToolbar.sizeToFit()
+        let doneButton = UIBarButtonItem(title: "Done", style: .plain, target: self, action: #selector(pickerDoneButtonTapped))
+        pickerToolbar.setItems([doneButton], animated: false)
         
-
+        let textField = UITextField()
+        textField.inputView = pickerView
+        textField.inputAccessoryView = pickerToolbar
+        
+        view.addSubview(textField)
+        
+        
         view.addSubview(ToDoView)
         
         self.ToDoView.register(TodoCell.self, forCellReuseIdentifier: "TodoCell")
         autoLayout()
         
         
-//        ToDoView.backgroundColor = .sy
         ToDoView.snp.makeConstraints { (make) in
             make.edges.equalToSuperview()
         }
-  
         
-        if let savedItems = UserDefaults.standard.array(forKey: "savedItems") as? [String] {
-                   items = savedItems
-            print("Loaded saved items: \(items)")
-        }
         self.ToDoView.dataSource = self
         self.ToDoView.delegate = self
         
@@ -102,11 +110,16 @@ class ViewController: UIViewController {
         let addAction = UIAlertAction(title: "추가", style: .default) { [weak self] _ in
             if let textField = alertController.textFields?.first,
                let newTask = textField.text,
-               !newTask.isEmpty,
+               //               !newTask.isEmpty,
                let selectedSection = self?.selectedSection {
+                
+                let combineTask = "\(selectedSection.rawValue):\(newTask)"
+                self?.items.append(combineTask)
                 
                 
                 self?.items.append(newTask)
+                print("### :추가하고")
+                
                 
                 
                 if var sectionItems = self?.sectionedItems[selectedSection] {
@@ -117,10 +130,12 @@ class ViewController: UIViewController {
                 }
                 
                 self?.ToDoView.reloadData()
+                
                 UserDefaults.standard.set(self?.items, forKey: "savedItems")
                 
+                
                 print("### input : \(selectedSection) \(newTask)")
-            
+                
             }
         }
         alertController.addAction(addAction)
@@ -130,7 +145,7 @@ class ViewController: UIViewController {
         
         present(alertController, animated: true, completion: nil)
     }
-
+    
 }
 
 
@@ -148,36 +163,48 @@ extension ViewController {
 
 extension ViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-           let deleteAction = UIContextualAction(style: .destructive, title: "Delete") { [weak self] (action, view, completionHandler) in
-
-               // 1. 실제 데이터를 삭제
-               guard let self = self else { return }
-               print("### delete row \(indexPath)")
+        let deleteAction = UIContextualAction(style: .destructive, title: "Delete") { [weak self] (action, view, completionHandler) in
             
-               var section = self.getSection(section: indexPath.section)
-               var values = self.sectionedItems[section]
-               //indexPath.section
-               values?.remove(at: indexPath.row)
-               self.sectionedItems[section] = values
-               
-               
-               // 2. UI로 보여지는 row를 삭제
-               self.ToDoView.deleteRows(at: [indexPath], with: .fade)
-               self.items.remove(at: indexPath.row)
-               UserDefaults.standard.set(self.items, forKey: "savedItems")
-               completionHandler(true)
-           }
+            // 1. 실제 데이터를 삭제
+            guard let self = self else { return }
+            print("### delete row \(indexPath)")
+            
+            guard let todoSection = TodoSection(rawValue: self.sections[indexPath.section]),
+                  var sectionItems = self.sectionedItems[todoSection] else {
+                completionHandler(false)
+                return
+            }
+            
+            // 삭제할 할 일
+            let task = sectionItems[indexPath.row]
+            sectionItems.remove(at: indexPath.row)
+            self.sectionedItems[todoSection] = sectionItems
+            
+            // UI에서도 삭제
+            self.ToDoView.deleteRows(at: [indexPath], with: .fade)
+            // items 배열에서 삭제
+            if let index = self.items.firstIndex(of: task) {
+                self.items.remove(at: index)
+            }
+            if let sectionIndex = self.items.firstIndex(where: { $0.hasSuffix(":\(task)") }) {
+                           self.items.remove(at: sectionIndex)
+                       }
+            UserDefaults.standard.set(self.items, forKey: "savedItems")
+            completionHandler(true)
+        }
+            print("### row 삭제")
 
-           let configuration = UISwipeActionsConfiguration(actions: [deleteAction])
-           return configuration
-       }
-   }
+        let configuration = UISwipeActionsConfiguration(actions: [deleteAction])
+        return configuration
+    }
     
+}
+
 
 extension ViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
         guard let todoSection = TodoSection(rawValue: sections[section]),
-            let items = sectionedItems[todoSection] else {
+              let items = sectionedItems[todoSection] else {
             return nil
         }
         
@@ -196,27 +223,28 @@ extension ViewController: UITableViewDataSource {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         guard let todoSection = TodoSection(rawValue: sections[section]),
               let itemsInSection = sectionedItems[todoSection] else {
+            
             return 0
         }
-        
+        print("###:\(itemsInSection)")
         return itemsInSection.count
     }
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "TodoCell", for: indexPath) as! TodoCell
         
-        let section = indexPath.section
-        
-        if section == 0 {
-            cell.TodoLabel.text = sectionedItems[TodoSection.exercsie]?[indexPath.row]
-        } else if section == 1 {
-            cell.TodoLabel.text = sectionedItems[TodoSection.work]?[indexPath.row]
-        } else if section == 2 {
-            cell.TodoLabel.text = sectionedItems[TodoSection.life]?[indexPath.row]
-        } else {
+        guard let todoSection = TodoSection(rawValue: sections[indexPath.section]),
+              let itemsInSection = sectionedItems[todoSection] else {
             return UITableViewCell()
         }
-    
+        
+        let item = itemsInSection[indexPath.row]
+        cell.TodoLabel.text = item
+        
+        let section = indexPath.section
+        
+        cell.cellSetting()
+        
         return cell
     }
 }
@@ -231,7 +259,7 @@ extension ViewController: UIPickerViewDelegate {
     func pickerView(_ pickerView: UIPickerView, titleForRow row: Int, forComponent component: Int) -> String? {
         return sections[row]
     }
-
+    
     func pickerView(_ pickerView: UIPickerView, didSelectRow row: Int, inComponent component: Int) {
         selectedSection = TodoSection(rawValue: sections[row])
     }
@@ -240,7 +268,7 @@ extension ViewController: UIPickerViewDataSource {
     func numberOfComponents(in pickerView: UIPickerView) -> Int {
         return 1
     }
-
+    
     func pickerView(_ pickerView: UIPickerView, numberOfRowsInComponent component: Int) -> Int {
         return sections.count
     }
@@ -258,5 +286,13 @@ extension ViewController {
             }
         }
         view.endEditing(true)
+    }
+}
+extension ViewController {
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        
+        UserDefaults.standard.set(items, forKey: "savedItems")
+        print("### 앱이 종료될때! 저장")
     }
 }
